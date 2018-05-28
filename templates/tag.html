@@ -1,0 +1,10 @@
+{{template "header"}}
+
+<h2>{{ .Name }}</h2>
+
+{{range .Posts}}
+<img src="{{ thumbmax . 400 }}">
+<p>{{ .Text | linkify }} -- {{ .Time }}, {{ .Likes }} likes [<a href="/post/{{ .Shortcode }}">View</a>]</p>
+{{end}}
+
+{{template "footer"}}

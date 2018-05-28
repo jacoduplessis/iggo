@@ -1,0 +1,27 @@
+{{template "header"}}
+
+<h2>Results for "{{ .Query }}"</h2>
+
+<h2>Users</h2>
+
+{{range .Users }}
+{{with .User }}
+<div style="display: flex; padding-bottom: 2rem">
+  <img src="{{ .ProfilePic }}">
+  <p><a href="/user/{{ .Username }}">{{ .Name }} ({{ .Username }})</a> {{ .Byline }}</p>
+</div>
+{{end}}
+{{end}}
+
+
+<h2>Tags</h2>
+
+<ul>
+{{range .Tags}}
+{{with .Tag}}
+  <li><a href="/tag/{{.Name}}">{{ .Name }} - {{ .MediaCount }} posts</a></li>
+{{end}}
+{{end}}
+</ul>
+
+{{template "footer"}}

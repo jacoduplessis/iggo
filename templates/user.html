@@ -1,0 +1,13 @@
+{{template "header"}}
+
+<h1>{{ .Name }} ({{ .Username }})</h1>
+
+<p>{{ .Bio }} ({{ .Followers }} followers, following {{ .Following }})</p>
+<p><img src="{{ .ProfilePic }}"></p>
+<hr>
+{{range .Posts}}
+<img src="{{ .Thumbnail }}">
+<p>{{ .Text | linkify }} -- {{ .Time }}, {{ .Likes }} likes [<a href="/post/{{ .Shortcode}}/">view</a>]</p>
+{{end}}
+
+{{template "footer"}}

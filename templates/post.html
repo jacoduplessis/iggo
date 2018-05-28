@@ -1,0 +1,9 @@
+{{template "header"}}
+
+<h2><a href="/user/{{ .Owner.Username }}">{{ .Owner.Name }} ({{ .Owner.Username }})</a></h2>
+
+<img src="{{ .URL }}">
+<p>{{ .Text | linkify }} -- {{ .Time }}</p>
+<p>{{ .Likes }} likes</p>
+
+{{template "footer"}}
