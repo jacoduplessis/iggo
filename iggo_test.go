@@ -1,8 +1,8 @@
 package main
 
 import (
-	"testing"
 	"io/ioutil"
+	"testing"
 )
 
 func TestUser(t *testing.T) {
@@ -17,7 +17,6 @@ func TestUser(t *testing.T) {
 	if len(user.Posts) != 12 {
 		t.Error("Did not find 12 posts")
 	}
-
 
 }
 
@@ -54,4 +53,3 @@ func TestLinkify(t *testing.T) {
 	}
 
 }
-

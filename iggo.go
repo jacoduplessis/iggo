@@ -1,20 +1,20 @@
 package main
 
 import (
-	"github.com/gorilla/mux"
-	"log"
-	"net/http"
-	"html/template"
-	"time"
-	"regexp"
-	"io/ioutil"
-	"github.com/gobuffalo/packr"
+	"encoding/json"
 	"fmt"
 	"github.com/dustin/go-humanize"
+	"github.com/gobuffalo/packr"
+	"github.com/gorilla/mux"
 	"github.com/jacoduplessis/simplejson"
+	"html/template"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"net/url"
-	"encoding/json"
 	"os"
+	"regexp"
+	"time"
 )
 
 var tb = packr.NewBox("./templates")
@@ -267,15 +267,17 @@ func setupTemplates() {
 	}
 }
 
-func renderTemplate(w http.ResponseWriter, templateName string, data interface{}) {
+func renderTemplate(w http.ResponseWriter, templateName string, data interface{}) *appError {
 
 	err := tmpl.ExecuteTemplate(w, templateName, data)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return &appError{"Template error", 500, err}
 	}
+	return nil
+
 }
 
-func sharedData(b []byte) ([]byte) {
+func sharedData(b []byte) []byte {
 
 	re := regexp.MustCompile(`window._sharedData\s?=\s?(.*);</script>`)
 	matches := re.FindSubmatch(b)
@@ -314,37 +316,74 @@ func get(path string) ([]byte, error) {
 
 }
 
-func IndexHandler(w http.ResponseWriter, r *http.Request) {
-
-	q := r.FormValue("q")
-	if q != "" {
-		sr, _ := getSearchResult(q)
-		sr.Query = q
-		renderTemplate(w, "search.html", sr)
-		return
+func sendJSON(w http.ResponseWriter, data interface{}) *appError {
+	w.Header().Set("Content-Type", "application/json")
+	b, err := json.Marshal(data)
+	if err != nil {
+		return &appError{"Could not encode data to required format", 500, err}
 	}
-	renderTemplate(w, "index.html", nil)
+	_, err = w.Write(b)
+	if err != nil {
+		return &appError{"Could not write response", 500, err}
+	}
+	return nil
 }
 
-func makeHandler(fetcher func(string) (interface{}, error), varname string, templateName string) http.HandlerFunc {
+func makeIndex() appHandler {
+	return func(w http.ResponseWriter, r *http.Request) *appError {
 
-	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.FormValue("q")
+		if q != "" {
+			sr, _ := getSearchResult(q)
+			sr.Query = q
+			if r.URL.Query().Get("format") == "json" {
+				return sendJSON(w, &sr)
+			}
+			return renderTemplate(w, "search.html", sr)
+
+		}
+		return renderTemplate(w, "index.html", nil)
+	}
+}
+
+type appError struct {
+	Message string
+	Code    int
+	Error   error
+}
+
+type appHandler func(w http.ResponseWriter, r *http.Request) *appError
+
+func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	if apperr := fn(w, r); apperr != nil {
+		http.Error(w, apperr.Message, apperr.Code)
+		log.Println(apperr.Error.Error())
+	}
+}
+
+func makeHandler(fetcher func(string) (interface{}, error), varname string, templateName string) appHandler {
+
+	return func(w http.ResponseWriter, r *http.Request) *appError {
 
 		vars := mux.Vars(r)
 		vardata, ok := vars[varname]
 		if !ok {
-			http.Error(w, "Invalid URL", http.StatusNoContent)
-			return
+			return &appError{"Invalid URL", 404, fmt.Errorf("Invalid URL %s", r.URL.Path)}
 		}
 
 		data, err := fetcher(vardata)
 
 		if err != nil {
-			http.Error(w, "Could not load data", http.StatusNoContent)
-			return
+			return &appError{"Could not load data", 404, err}
 		}
 
-		renderTemplate(w, templateName, data)
+		if r.URL.Query().Get("format") == "json" {
+			return sendJSON(w, &data)
+		}
+
+		return renderTemplate(w, templateName, data)
 	}
 }
 
@@ -361,9 +400,10 @@ func getListenAddr() string {
 func main() {
 	setupTemplates()
 	r := mux.NewRouter()
-	r.HandleFunc("/", IndexHandler)
-	r.HandleFunc("/user/{username}", makeHandler(GetUser, "username", "user.html"))
-	r.HandleFunc("/post/{shortcode}", makeHandler(GetPost, "shortcode", "post.html"))
-	r.HandleFunc("/tag/{slug}", makeHandler(GetTag, "slug", "tag.html"))
+
+	r.Handle("/", makeIndex())
+	r.Handle("/user/{username}", makeHandler(GetUser, "username", "user.html"))
+	r.Handle("/post/{shortcode}", makeHandler(GetPost, "shortcode", "post.html"))
+	r.Handle("/tag/{slug}", makeHandler(GetTag, "slug", "tag.html"))
 	log.Fatal(http.ListenAndServe(getListenAddr(), r))
 }
