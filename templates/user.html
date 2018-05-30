@@ -7,7 +7,7 @@
 <hr>
 {{range .Posts}}
 <img src="{{ .Thumbnail }}">
-<p>{{ .Text | linkify }} -- {{ .Time }}, {{ .Likes }} likes [<a href="/post/{{ .Shortcode}}/">view</a>]</p>
+<p>{{ .Text | linkify }} -- {{ .Time }}, {{ .Likes }} likes [<a href="/post/{{ .Shortcode}}">view</a>]</p>
 {{end}}
 
 {{template "footer"}}
