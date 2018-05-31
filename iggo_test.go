@@ -53,3 +53,21 @@ func TestLinkify(t *testing.T) {
 	}
 
 }
+
+func TestMaxSize(t *testing.T) {
+
+	sizes := []Size{
+		{Width:200, Height:200},
+		{Width:400, Height: 400},
+		{Width:600, Height:600},
+	}
+
+	p := &Post{Sizes:sizes}
+
+	s := sizemax(p, 500)
+
+	if s.Width != 400 {
+		t.Error("Expected size with width 400, not", s.Width)
+	}
+
+}

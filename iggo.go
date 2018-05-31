@@ -20,7 +20,7 @@ import (
 var tb = packr.NewBox("./templates")
 
 var templateFuncs = template.FuncMap{
-	"thumbmax": thumbmax,
+	"sizemax": sizemax,
 	"linkify":  linkify,
 }
 
@@ -255,16 +255,16 @@ func GetTag(r *http.Request) (interface{}, error) {
 	return GetTagFromMarkup(b)
 }
 
-func thumbmax(p *Post, w int) string {
-	r := ""
-	for _, s := range p.Sizes {
+func sizemax(p *Post, w int) Size {
+	ix := 0
+	for i, s := range p.Sizes {
 		if s.Width <= w {
-			r = s.URL
+			ix = i
 		} else {
 			break
 		}
 	}
-	return r
+	return p.Sizes[ix]
 }
 
 func linkify(s string) template.HTML {

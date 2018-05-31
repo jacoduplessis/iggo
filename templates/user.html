@@ -6,7 +6,9 @@
 <p><img src="{{ .ProfilePic }}"></p>
 <hr>
 {{range .Posts}}
-<img src="{{ .Thumbnail }}">
+{{with sizemax . 400}}
+<img src="{{.URL}}" style="height: {{.Height}}px; width: {{.Width}}px">
+{{end}}
 <p>{{ .Text | linkify }} -- {{ .Time }}, {{ .Likes }} likes [<a href="/post/{{ .Shortcode}}">view</a>]</p>
 {{end}}
 
