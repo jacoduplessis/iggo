@@ -19,14 +19,18 @@ import (
 
 var tb = packr.NewBox("./templates")
 
-var tmpl = template.New("__").Funcs(template.FuncMap{
+var templateFuncs = template.FuncMap{
 	"thumbmax": thumbmax,
 	"linkify":  linkify,
-})
+}
+
+var templateMap = map[string]*template.Template{}
 
 var client = &http.Client{
 	Timeout: time.Second * 10,
 }
+
+type Fetcher func(r *http.Request) (interface{}, error)
 
 type Size struct {
 	URL    string
@@ -97,8 +101,12 @@ type Tag struct {
 	Posts []*Post
 }
 
-func GetPost(shortcode string) (interface{}, error) {
+func GetPost(r *http.Request) (interface{}, error) {
 
+	shortcode, ok := mux.Vars(r)["shortcode"]
+	if !ok {
+		return nil, fmt.Errorf("Could not find shortcode in path %s", r.URL.Path)
+	}
 	path := fmt.Sprintf("/p/%s/", shortcode)
 	b, err := get(path)
 	if err != nil {
@@ -219,8 +227,12 @@ func GetTagFromMarkup(markup []byte) (interface{}, error) {
 	return data, nil
 }
 
-func GetUser(username string) (interface{}, error) {
+func GetUser(r *http.Request) (interface{}, error) {
 
+	username, ok := mux.Vars(r)["username"]
+	if !ok {
+		return nil, fmt.Errorf("Could not find username in path %s", r.URL.Path)
+	}
 	path := fmt.Sprintf("/%s/", username)
 	b, err := get(path)
 	if err != nil {
@@ -229,8 +241,12 @@ func GetUser(username string) (interface{}, error) {
 	return GetUserFromMarkup(b)
 }
 
-func GetTag(slug string) (interface{}, error) {
+func GetTag(r *http.Request) (interface{}, error) {
 
+	slug, ok := mux.Vars(r)["slug"]
+	if !ok {
+		return nil, fmt.Errorf("Could not find username in path %s", r.URL.Path)
+	}
 	path := fmt.Sprintf("/explore/tags/%s/", slug)
 	b, err := get(path)
 	if err != nil {
@@ -261,15 +277,22 @@ func linkify(s string) template.HTML {
 }
 
 func setupTemplates() {
-
-	for _, n := range tb.List() {
-		template.Must(tmpl.New(n).Parse(tb.String(n)))
+	base := template.Must(template.New("").Parse(tb.String("base.html"))).Funcs(templateFuncs)
+	keys := []string{"index", "post", "search", "tag", "user"}
+	for _, key := range keys {
+		clone := template.Must(base.Clone())
+		tmpl := template.Must(clone.Parse(tb.String(key + ".html")))
+		templateMap[key] = tmpl
 	}
 }
 
-func renderTemplate(w http.ResponseWriter, templateName string, data interface{}) *appError {
+func renderTemplate(w http.ResponseWriter, key string, data interface{}) *appError {
 
-	err := tmpl.ExecuteTemplate(w, templateName, data)
+	tmpl, ok := templateMap[key]
+	if !ok {
+		return &appError{"Template error", 500, fmt.Errorf(`template "%s" not found`, key)}
+	}
+	err := tmpl.ExecuteTemplate(w, "", data)
 	if err != nil {
 		return &appError{"Template error", 500, err}
 	}
@@ -339,10 +362,10 @@ func makeIndex() appHandler {
 			if r.URL.Query().Get("format") == "json" {
 				return sendJSON(w, &sr)
 			}
-			return renderTemplate(w, "search.html", sr)
+			return renderTemplate(w, "search", sr)
 
 		}
-		return renderTemplate(w, "index.html", nil)
+		return renderTemplate(w, "index", nil)
 	}
 }
 
@@ -363,17 +386,11 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func makeHandler(fetcher func(string) (interface{}, error), varname string, templateName string) appHandler {
+func makeHandler(fetcher Fetcher, templateKey string) appHandler {
 
 	return func(w http.ResponseWriter, r *http.Request) *appError {
 
-		vars := mux.Vars(r)
-		vardata, ok := vars[varname]
-		if !ok {
-			return &appError{"Invalid URL", 404, fmt.Errorf("Invalid URL %s", r.URL.Path)}
-		}
-
-		data, err := fetcher(vardata)
+		data, err := fetcher(r)
 
 		if err != nil {
 			return &appError{"Could not load data", 404, err}
@@ -383,7 +400,7 @@ func makeHandler(fetcher func(string) (interface{}, error), varname string, temp
 			return sendJSON(w, &data)
 		}
 
-		return renderTemplate(w, templateName, data)
+		return renderTemplate(w, templateKey, data)
 	}
 }
 
@@ -400,10 +417,9 @@ func getListenAddr() string {
 func main() {
 	setupTemplates()
 	r := mux.NewRouter()
-
 	r.Handle("/", makeIndex())
-	r.Handle("/user/{username}", makeHandler(GetUser, "username", "user.html"))
-	r.Handle("/post/{shortcode}", makeHandler(GetPost, "shortcode", "post.html"))
-	r.Handle("/tag/{slug}", makeHandler(GetTag, "slug", "tag.html"))
+	r.Handle("/user/{username}", makeHandler(GetUser, "user"))
+	r.Handle("/post/{shortcode}", makeHandler(GetPost, "post"))
+	r.Handle("/tag/{slug}", makeHandler(GetTag, "tag"))
 	log.Fatal(http.ListenAndServe(getListenAddr(), r))
 }

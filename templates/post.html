@@ -1,4 +1,4 @@
-{{template "header"}}
+{{define "content"}}
 
 <h2><a href="/user/{{ .Owner.Username }}">{{ .Owner.Name }} ({{ .Owner.Username }})</a></h2>
 
@@ -6,4 +6,4 @@
 <p>{{ .Text | linkify }} -- {{ .Time }}</p>
 <p>{{ .Likes }} likes</p>
 
-{{template "footer"}}
+{{end}}
