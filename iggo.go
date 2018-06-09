@@ -62,7 +62,6 @@ type Post struct {
 }
 
 type PostLiker struct {
-	ID         int
 	ProfilePic string
 	Username   string
 }
@@ -123,6 +122,15 @@ func GetPostFromMarkup(markup []byte) (interface{}, error) {
 	base := container.GetPath("entry_data", "PostPage").GetIndex(0).GetPath("graphql", "shortcode_media")
 
 	timestamp := base.Get("taken_at_timestamp").GetInt64()
+	likers := []*PostLiker{}
+
+	for _, edge := range base.GetPath("edge_media_preview_like", "edges").GetArray() {
+		n := edge.Get("node")
+		likers = append(likers, &PostLiker{
+			ProfilePic: n.Get("profile_pic_url").GetString(),
+			Username:   n.Get("username").GetString(),
+		})
+	}
 
 	data := &Post{
 		Shortcode: base.Get("shortcode").GetString(),
@@ -132,6 +140,7 @@ func GetPostFromMarkup(markup []byte) (interface{}, error) {
 		Timestamp: timestamp,
 		Time:      humanize.Time(time.Unix(timestamp, 0)),
 		Likes:     base.Get("edge_media_preview_like").Get("count").GetInt(),
+		Likers:    likers,
 		Owner: &PostOwner{
 			ID:         base.GetPath("owner", "id").GetString(),
 			ProfilePic: base.GetPath("owner", "profile_pic_url").GetString(),
