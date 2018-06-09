@@ -427,5 +427,7 @@ func main() {
 	r.Handle("/user/{username}", makeHandler(GetUser, "user"))
 	r.Handle("/post/{shortcode}", makeHandler(GetPost, "post"))
 	r.Handle("/tag/{slug}", makeHandler(GetTag, "tag"))
-	log.Fatal(http.ListenAndServe(getListenAddr(), r))
+	addr := getListenAddr()
+	fmt.Println("Listening on ", addr)
+	log.Fatal(http.ListenAndServe(addr, r))
 }
