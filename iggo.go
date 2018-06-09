@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dustin/go-humanize"
-	"github.com/gorilla/mux"
 	"github.com/jacoduplessis/simplejson"
 	"html/template"
 	"io/ioutil"
@@ -13,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -99,9 +99,9 @@ type Tag struct {
 
 func GetPost(r *http.Request) (interface{}, error) {
 
-	shortcode, ok := mux.Vars(r)["shortcode"]
-	if !ok {
-		return nil, fmt.Errorf("Could not find shortcode in path %s", r.URL.Path)
+	shortcode := strings.TrimRight(r.URL.Path[len("/post/"):], "/")
+	if shortcode == "" {
+		return nil, nil
 	}
 	path := fmt.Sprintf("/p/%s/", shortcode)
 	b, err := get(path)
@@ -235,9 +235,9 @@ func GetTagFromMarkup(markup []byte) (interface{}, error) {
 
 func GetUser(r *http.Request) (interface{}, error) {
 
-	username, ok := mux.Vars(r)["username"]
-	if !ok {
-		return nil, fmt.Errorf("Could not find username in path %s", r.URL.Path)
+	username := strings.TrimRight(r.URL.Path[len("/user/"):], "/")
+	if username == "" {
+		return nil, nil
 	}
 	path := fmt.Sprintf("/%s/", username)
 	b, err := get(path)
@@ -249,10 +249,11 @@ func GetUser(r *http.Request) (interface{}, error) {
 
 func GetTag(r *http.Request) (interface{}, error) {
 
-	slug, ok := mux.Vars(r)["slug"]
-	if !ok {
-		return nil, fmt.Errorf("Could not find username in path %s", r.URL.Path)
+	slug := strings.TrimRight(r.URL.Path[len("/tag/"):], "/")
+	if slug == "" {
+		return nil, nil
 	}
+
 	path := fmt.Sprintf("/explore/tags/%s/", slug)
 	b, err := get(path)
 	if err != nil {
@@ -398,7 +399,7 @@ func makeHandler(fetcher Fetcher, templateKey string) appHandler {
 
 		data, err := fetcher(r)
 
-		if err != nil {
+		if err != nil || data == nil {
 			return &appError{"Could not load data", 404, err}
 		}
 
@@ -422,12 +423,11 @@ func getListenAddr() string {
 
 func main() {
 	setupTemplates()
-	r := mux.NewRouter()
-	r.Handle("/", makeIndex())
-	r.Handle("/user/{username}", makeHandler(GetUser, "user"))
-	r.Handle("/post/{shortcode}", makeHandler(GetPost, "post"))
-	r.Handle("/tag/{slug}", makeHandler(GetTag, "tag"))
+	http.Handle("/", makeIndex())
+	http.Handle("/user/", makeHandler(GetUser, "user"))
+	http.Handle("/post/", makeHandler(GetPost, "post"))
+	http.Handle("/tag/", makeHandler(GetTag, "tag"))
 	addr := getListenAddr()
 	fmt.Println("Listening on ", addr)
-	log.Fatal(http.ListenAndServe(addr, r))
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
