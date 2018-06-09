@@ -1,0 +1,15 @@
+[Unit]
+Description="iggo web server"
+After=network.target
+
+[Service]
+User=foo
+Group=foo
+Environment=PORT=9090
+ExecStart=/home/foo/bin/iggo
+Type=simple
+Restart=always
+WorkingDirectory=/path/here
+
+[Install]
+WantedBy=multi-user.target
