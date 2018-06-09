@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dustin/go-humanize"
-	"github.com/gobuffalo/packr"
 	"github.com/gorilla/mux"
 	"github.com/jacoduplessis/simplejson"
 	"html/template"
@@ -17,11 +16,9 @@ import (
 	"time"
 )
 
-var tb = packr.NewBox("./templates")
-
 var templateFuncs = template.FuncMap{
 	"sizemax": sizemax,
-	"linkify":  linkify,
+	"linkify": linkify,
 }
 
 var templateMap = map[string]*template.Template{}
@@ -277,11 +274,11 @@ func linkify(s string) template.HTML {
 }
 
 func setupTemplates() {
-	base := template.Must(template.New("").Parse(tb.String("base.html"))).Funcs(templateFuncs)
+	base := template.Must(template.ParseFiles("templates/base.html")).Funcs(templateFuncs)
 	keys := []string{"index", "post", "search", "tag", "user"}
 	for _, key := range keys {
 		clone := template.Must(base.Clone())
-		tmpl := template.Must(clone.Parse(tb.String(key + ".html")))
+		tmpl := template.Must(clone.ParseFiles("templates/" + key + ".html"))
 		templateMap[key] = tmpl
 	}
 }
@@ -292,7 +289,7 @@ func renderTemplate(w http.ResponseWriter, key string, data interface{}) *appErr
 	if !ok {
 		return &appError{"Template error", 500, fmt.Errorf(`template "%s" not found`, key)}
 	}
-	err := tmpl.ExecuteTemplate(w, "", data)
+	err := tmpl.ExecuteTemplate(w, "base.html", data)
 	if err != nil {
 		return &appError{"Template error", 500, err}
 	}
