@@ -6,6 +6,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/jacoduplessis/simplejson"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -104,16 +105,16 @@ func GetPost(r *http.Request) (interface{}, error) {
 		return nil, nil
 	}
 	path := fmt.Sprintf("/p/%s/", shortcode)
-	b, err := get(path)
+	body, err := get(path)
 	if err != nil {
 		return nil, err
 	}
-	return GetPostFromMarkup(b)
+	return GetPostFromMarkup(body)
 }
 
-func GetPostFromMarkup(markup []byte) (interface{}, error) {
+func GetPostFromMarkup(body io.Reader) (interface{}, error) {
 
-	sd := sharedData(markup)
+	sd := sharedData(body)
 
 	container, err := simplejson.NewJson(sd)
 	if err != nil {
@@ -191,9 +192,9 @@ func getPosts(j *simplejson.Json) []*Post {
 	return posts
 }
 
-func GetUserFromMarkup(markup []byte) (interface{}, error) {
+func GetUserFromMarkup(body io.Reader) (interface{}, error) {
 
-	sd := sharedData(markup)
+	sd := sharedData(body)
 
 	container, err := simplejson.NewJson(sd)
 	if err != nil {
@@ -215,9 +216,9 @@ func GetUserFromMarkup(markup []byte) (interface{}, error) {
 	return data, nil
 }
 
-func GetTagFromMarkup(markup []byte) (interface{}, error) {
+func GetTagFromMarkup(body io.Reader) (interface{}, error) {
 
-	sd := sharedData(markup)
+	sd := sharedData(body)
 
 	container, err := simplejson.NewJson(sd)
 	if err != nil {
@@ -240,11 +241,11 @@ func GetUser(r *http.Request) (interface{}, error) {
 		return nil, nil
 	}
 	path := fmt.Sprintf("/%s/", username)
-	b, err := get(path)
+	body, err := get(path)
 	if err != nil {
 		return nil, err
 	}
-	return GetUserFromMarkup(b)
+	return GetUserFromMarkup(body)
 }
 
 func GetTag(r *http.Request) (interface{}, error) {
@@ -255,11 +256,11 @@ func GetTag(r *http.Request) (interface{}, error) {
 	}
 
 	path := fmt.Sprintf("/explore/tags/%s/", slug)
-	b, err := get(path)
+	body, err := get(path)
 	if err != nil {
 		return nil, err
 	}
-	return GetTagFromMarkup(b)
+	return GetTagFromMarkup(body)
 }
 
 func sizemax(p *Post, w int) Size {
@@ -307,12 +308,16 @@ func renderTemplate(w http.ResponseWriter, key string, data interface{}) *appErr
 
 }
 
-func sharedData(b []byte) []byte {
+func sharedData(r io.Reader) []byte {
 
 	re := regexp.MustCompile(`window._sharedData\s?=\s?(.*);</script>`)
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil
+	}
 	matches := re.FindSubmatch(b)
 	if len(matches) < 2 {
-		return []byte{}
+		return nil
 	}
 	return matches[1]
 
@@ -324,25 +329,23 @@ func getSearchResult(q string) (*SearchResult, error) {
 	qs.Add("context", "blended")
 	qs.Add("query", q)
 	r, err := client.Get("https://www.instagram.com/web/search/topsearch/?" + qs.Encode())
+
+	if err != nil {
+		return sr, err
+	}
 	defer r.Body.Close()
-	if err != nil {
-		return sr, err
-	}
-	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return sr, err
-	}
-	err = json.Unmarshal(b, sr)
+
+	err = json.NewDecoder(r.Body).Decode(sr)
 	return sr, err
 }
 
-func get(path string) ([]byte, error) {
+func get(path string) (io.Reader, error) {
 	r, err := client.Get("https://www.instagram.com" + path)
-	defer r.Body.Close()
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
-	return ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	return r.Body, nil
 
 }
 
