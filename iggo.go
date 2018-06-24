@@ -291,12 +291,17 @@ func linkify(s string) template.HTML {
 
 func setupTemplates() {
 	base := template.Must(template.ParseFiles("templates/base.html")).Funcs(templateFuncs)
+	if _, err := base.ParseFiles("templates/custom.html"); err != nil {
+		base.New("custom.html").Parse("")
+	}
+
 	keys := []string{"index", "post", "search", "tag", "user"}
 	for _, key := range keys {
 		clone := template.Must(base.Clone())
 		tmpl := template.Must(clone.ParseFiles("templates/" + key + ".html"))
 		templateMap[key] = tmpl
 	}
+
 }
 
 func renderTemplate(w http.ResponseWriter, key string, data interface{}) *appError {
@@ -344,13 +349,9 @@ func getSearchResult(q string) (*SearchResult, error) {
 	return sr, err
 }
 
-func sendJSON(w http.ResponseWriter, data interface{}) *appError {
+func renderJSON(w http.ResponseWriter, data interface{}) *appError {
 	w.Header().Set("Content-Type", "application/json")
-	b, err := json.Marshal(data)
-	if err != nil {
-		return &appError{"Could not encode data to required format", 500, err}
-	}
-	_, err = w.Write(b)
+	err := json.NewEncoder(w).Encode(data)
 	if err != nil {
 		return &appError{"Could not write response", 500, err}
 	}
@@ -365,7 +366,7 @@ func makeIndex() appHandler {
 			sr, _ := getSearchResult(q)
 			sr.Query = q
 			if r.URL.Query().Get("format") == "json" {
-				return sendJSON(w, &sr)
+				return renderJSON(w, &sr)
 			}
 			return renderTemplate(w, "search", sr)
 
@@ -402,7 +403,7 @@ func makeHandler(fetcher Fetcher, templateKey string) appHandler {
 		}
 
 		if r.URL.Query().Get("format") == "json" {
-			return sendJSON(w, &data)
+			return renderJSON(w, &data)
 		}
 
 		return renderTemplate(w, templateKey, data)
@@ -421,10 +422,11 @@ func getListenAddr() string {
 
 func main() {
 	setupTemplates()
-	http.Handle("/", makeIndex())
 	http.Handle("/user/", makeHandler(GetUser, "user"))
 	http.Handle("/post/", makeHandler(GetPost, "post"))
 	http.Handle("/tag/", makeHandler(GetTag, "tag"))
+	http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir("./static"))))
+	http.Handle("/", makeIndex())
 	addr := getListenAddr()
 	fmt.Println("Listening on ", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
