@@ -4,6 +4,6 @@
 
 <img src="{{ .URL }}">
 <p>{{ .Text | linkify }} -- {{ .Time }}</p>
-<p>{{ .Likes }} likes</p>
+<p>{{ .Likes }} likes{{if .Likers}}, including{{range .Likers}} <a href="/user/{{ .Username }}">@{{ .Username }}</a>{{end}}{{end}}</p>
 
 {{end}}
