@@ -104,12 +104,13 @@ func GetPost(r *http.Request) (interface{}, error) {
 	if shortcode == "" {
 		return nil, nil
 	}
-	path := fmt.Sprintf("/p/%s/", shortcode)
-	body, err := get(path)
+	resp, err := client.Get(fmt.Sprintf("https://www.instagram.com/p/%s/", shortcode))
 	if err != nil {
 		return nil, err
 	}
-	return GetPostFromMarkup(body)
+	defer resp.Body.Close()
+
+	return GetPostFromMarkup(resp.Body)
 }
 
 func GetPostFromMarkup(body io.Reader) (interface{}, error) {
@@ -240,12 +241,13 @@ func GetUser(r *http.Request) (interface{}, error) {
 	if username == "" {
 		return nil, nil
 	}
-	path := fmt.Sprintf("/%s/", username)
-	body, err := get(path)
+
+	resp, err := client.Get(fmt.Sprintf("https://www.instagram.com/%s/", username))
 	if err != nil {
 		return nil, err
 	}
-	return GetUserFromMarkup(body)
+	defer resp.Body.Close()
+	return GetUserFromMarkup(resp.Body)
 }
 
 func GetTag(r *http.Request) (interface{}, error) {
@@ -255,12 +257,15 @@ func GetTag(r *http.Request) (interface{}, error) {
 		return nil, nil
 	}
 
-	path := fmt.Sprintf("/explore/tags/%s/", slug)
-	body, err := get(path)
+	resp, err := client.Get(fmt.Sprintf("https://www.instagram.com/explore/tags/%s/", slug))
 	if err != nil {
 		return nil, err
 	}
-	return GetTagFromMarkup(body)
+	defer resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	return GetTagFromMarkup(resp.Body)
 }
 
 func sizemax(p *Post, w int) Size {
@@ -337,16 +342,6 @@ func getSearchResult(q string) (*SearchResult, error) {
 
 	err = json.NewDecoder(r.Body).Decode(sr)
 	return sr, err
-}
-
-func get(path string) (io.Reader, error) {
-	r, err := client.Get("https://www.instagram.com" + path)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Body.Close()
-	return r.Body, nil
-
 }
 
 func sendJSON(w http.ResponseWriter, data interface{}) *appError {
