@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dustin/go-humanize"
+	"github.com/gorilla/feeds"
 	"github.com/jacoduplessis/simplejson"
 	"html/template"
 	"io"
@@ -27,8 +28,6 @@ var templateMap = map[string]*template.Template{}
 var client = &http.Client{
 	Timeout: time.Second * 10,
 }
-
-type Fetcher func(r *http.Request) (interface{}, error)
 
 type Size struct {
 	URL    string
@@ -98,7 +97,7 @@ type Tag struct {
 	Posts []*Post
 }
 
-func GetPost(r *http.Request) (interface{}, error) {
+func GetPost(r *http.Request) (*Post, error) {
 
 	shortcode := strings.TrimRight(r.URL.Path[len("/post/"):], "/")
 	if shortcode == "" {
@@ -113,7 +112,7 @@ func GetPost(r *http.Request) (interface{}, error) {
 	return GetPostFromMarkup(resp.Body)
 }
 
-func GetPostFromMarkup(body io.Reader) (interface{}, error) {
+func GetPostFromMarkup(body io.Reader) (*Post, error) {
 
 	sd := sharedData(body)
 
@@ -193,7 +192,7 @@ func getPosts(j *simplejson.Json) []*Post {
 	return posts
 }
 
-func GetUserFromMarkup(body io.Reader) (interface{}, error) {
+func GetUserFromMarkup(body io.Reader) (*User, error) {
 
 	sd := sharedData(body)
 
@@ -217,7 +216,7 @@ func GetUserFromMarkup(body io.Reader) (interface{}, error) {
 	return data, nil
 }
 
-func GetTagFromMarkup(body io.Reader) (interface{}, error) {
+func GetTagFromMarkup(body io.Reader) (*Tag, error) {
 
 	sd := sharedData(body)
 
@@ -235,9 +234,10 @@ func GetTagFromMarkup(body io.Reader) (interface{}, error) {
 	return data, nil
 }
 
-func GetUser(r *http.Request) (interface{}, error) {
+// GetUserFromUsername takes a username, makes a request
+// and parses the response into a User struct, returning a pointer
+func GetUserFromUsername(username string) (*User, error) {
 
-	username := strings.TrimRight(r.URL.Path[len("/user/"):], "/")
 	if username == "" {
 		return nil, nil
 	}
@@ -248,9 +248,16 @@ func GetUser(r *http.Request) (interface{}, error) {
 	}
 	defer resp.Body.Close()
 	return GetUserFromMarkup(resp.Body)
+
 }
 
-func GetTag(r *http.Request) (interface{}, error) {
+func GetUser(r *http.Request) (*User, error) {
+
+	username := strings.TrimRight(r.URL.Path[len("/user/"):], "/")
+	return GetUserFromUsername(username)
+}
+
+func GetTag(r *http.Request) (*Tag, error) {
 
 	slug := strings.TrimRight(r.URL.Path[len("/tag/"):], "/")
 	if slug == "" {
@@ -358,6 +365,49 @@ func renderJSON(w http.ResponseWriter, data interface{}) *appError {
 	return nil
 }
 
+func makeFeedHandler() http.Handler {
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		username := strings.TrimRight(r.URL.Path[len("/feed/"):], "/")
+		user, err := GetUserFromUsername(username)
+		if err != nil {
+			log.Printf("Error fetching user (%s) data for feed: %s", username, err)
+			w.Write([]byte("Error"))
+			return
+		}
+
+		now := time.Now()
+		feed := &feeds.Feed{
+			Title:       fmt.Sprintf("Instagram Posts by %s", username),
+			Link:        &feeds.Link{Href: fmt.Sprintf("https://www.instagram.com/%s", username)},
+			Description: fmt.Sprintf("Recent photos posted by %s on Instagram", username),
+			Created:     now,
+		}
+
+		for _, post := range user.Posts {
+
+			item := feeds.Item{
+				Id:      post.Shortcode,
+				Title:   post.Text,
+				Link:    &feeds.Link{Href: fmt.Sprintf("https://www.instagram.com/p/%s", post.Shortcode)},
+				Author:  &feeds.Author{Name: username},
+				Created: time.Unix(post.Timestamp, 0),
+				Content: sizemax(post, 800).URL,
+			}
+
+			feed.Add(&item)
+
+		}
+
+		err = feed.WriteRss(w)
+		if err != nil {
+			log.Printf("Error writing feed: %s", err)
+		}
+
+	})
+}
+
 func makeIndex() appHandler {
 	return func(w http.ResponseWriter, r *http.Request) *appError {
 
@@ -392,11 +442,11 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func makeHandler(fetcher Fetcher, templateKey string) appHandler {
+func makeHandler(f func(*http.Request) (interface{}, error), templateKey string) appHandler {
 
 	return func(w http.ResponseWriter, r *http.Request) *appError {
 
-		data, err := fetcher(r)
+		data, err := f(r)
 
 		if err != nil || data == nil {
 			return &appError{"Could not load data", 404, err}
@@ -420,12 +470,25 @@ func getListenAddr() string {
 	return "127.0.0.1:8000"
 }
 
+func userFetcher(r *http.Request) (interface{}, error) {
+	return GetUser(r)
+}
+
+func postFetcher(r *http.Request) (interface{}, error) {
+	return GetPost(r)
+}
+
+func tagFetcher(r *http.Request) (interface{}, error) {
+	return GetTag(r)
+}
+
 func main() {
 	setupTemplates()
-	http.Handle("/user/", makeHandler(GetUser, "user"))
-	http.Handle("/post/", makeHandler(GetPost, "post"))
-	http.Handle("/tag/", makeHandler(GetTag, "tag"))
+	http.Handle("/user/", makeHandler(userFetcher, "user"))
+	http.Handle("/post/", makeHandler(postFetcher, "post"))
+	http.Handle("/tag/", makeHandler(tagFetcher, "tag"))
 	http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir("./static"))))
+	http.Handle("/feed/", makeFeedHandler())
 	http.Handle("/", makeIndex())
 	addr := getListenAddr()
 	fmt.Println("Listening on ", addr)
